@@ -103,6 +103,7 @@ extern uint64 sys_link(void);
 extern uint64 sys_mkdir(void);
 extern uint64 sys_close(void);
 extern uint64 sys_sync(void);
+extern uint64 sys_trace(void);
 
 // An array mapping syscall numbers from syscall.h
 // to the function that handles the system call.
@@ -130,8 +131,88 @@ static uint64 (*syscalls[])(void) = {
   [SYS_mkdir]   = sys_mkdir,
   [SYS_close]   = sys_close,
   [SYS_sync]    = sys_sync,
+  [SYS_trace]   = sys_trace,
   // clang-format on
 };
+
+enum arg_kind { ARG_INTEGER, ARG_STRING, ARG_NONE };
+
+static enum arg_kind
+first_arg_kind(int num)
+{
+  switch (num) {
+    case SYS_open:
+    case SYS_exec:
+    case SYS_chdir:
+    case SYS_mkdir:
+    case SYS_unlink:
+    case SYS_link:
+    case SYS_mknod:
+      return ARG_STRING;
+    case SYS_fork:
+    case SYS_getpid:
+    case SYS_uptime:
+    case SYS_sync:
+      return ARG_NONE;
+    default:
+      return ARG_INTEGER;
+  }
+}
+
+static char *
+get_syscall_name(int num)
+{
+  switch (num) {
+    case SYS_fork: return "fork";
+    case SYS_exit: return "exit";
+    case SYS_wait: return "wait";
+    case SYS_pipe: return "pipe";
+    case SYS_read: return "read";
+    case SYS_kill: return "kill";
+    case SYS_exec: return "exec";
+    case SYS_fstat: return "fstat";
+    case SYS_chdir: return "chdir";
+    case SYS_dup: return "dup";
+    case SYS_getpid: return "getpid";
+    case SYS_sbrk: return "sbrk";
+    case SYS_pause: return "pause";
+    case SYS_uptime: return "uptime";
+    case SYS_open: return "open";
+    case SYS_write: return "write";
+    case SYS_mknod: return "mknod";
+    case SYS_unlink: return "unlink";
+    case SYS_link: return "link";
+    case SYS_mkdir: return "mkdir";
+    case SYS_close: return "close";
+    case SYS_sync: return "sync";
+    case SYS_trace: return "trace";
+  }
+
+  return "unknown";
+}
+
+static void
+print_trace_line(int num, uint64 first_arg, char *string_arg)
+{
+  struct proc *p = myproc();
+  char *name = get_syscall_name(num);
+  int return_value = (int)p->trapframe->a0;
+
+  switch(first_arg_kind(num)){
+  case ARG_STRING:
+    if(string_arg)
+      printk("[%d] %s(\"%s\") -> %d\n", p->pid, name, string_arg, return_value);
+    else
+      printk("[%d] %s(?) -> %d\n", p->pid, name, return_value);
+    break;
+  case ARG_NONE:
+    printk("[%d] %s() -> %d\n", p->pid, name, return_value);
+    break;
+  case ARG_INTEGER:
+    printk("[%d] %s(%d) -> %d\n", p->pid, name, (int)first_arg, return_value);
+    break;
+  }
+}
 
 void
 syscall(void)
@@ -141,9 +222,21 @@ syscall(void)
 
   num = p->trapframe->a7;
   if (num > 0 && num < NELEM(syscalls) && syscalls[num]) {
+    uint64 first_arg = p->trapframe->a0;
+    char string_buffer[MAXPATH];
+    char *string_arg = 0;
+
+    if ((p->trace_mask & (1 << num)) && first_arg_kind(num) == ARG_STRING && fetchstr(first_arg, string_buffer, sizeof(string_buffer)) >= 0) {
+      string_arg = string_buffer;
+    }
+
     // Use num to lookup the system call function for num, call it,
     // and store its return value in p->trapframe->a0
     p->trapframe->a0 = syscalls[num]();
+
+    if (p->trace_mask & (1 << num)) {
+      print_trace_line(num, first_arg, string_arg);
+    }
   } else {
     printk("%d %s: unknown sys call %d\n", p->pid, p->name, num);
     p->trapframe->a0 = -1;
