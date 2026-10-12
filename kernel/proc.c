@@ -307,6 +307,25 @@ kfork(void)
   return pid;
 }
 
+// Returns the number of processes whose state is not UNUSED.
+uint64
+count_processes(void)
+{
+  uint64 process_count = 0;
+
+  for (struct proc *process = proc; process < &proc[NPROC]; process++) {
+    acquire(&process->lock);
+    
+    if (process->state != UNUSED) {
+      process_count++;
+    }
+
+    release(&process->lock);
+  }
+  
+  return process_count;
+}
+
 // Pass p's abandoned children to init.
 // Caller must hold wait_lock.
 void

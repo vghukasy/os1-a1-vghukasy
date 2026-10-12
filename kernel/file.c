@@ -177,3 +177,20 @@ filewrite(struct file *f, uint64 addr, int n)
 
   return ret;
 }
+
+// Returns the number of in-use entries in the system file table
+uint64
+count_open_files(void)
+{
+  uint64 open_file_count = 0;
+
+  acquire(&ftable.lock);
+  for (struct file *file = ftable.file; file < ftable.file + NFILE; file++) {
+    if (file->ref > 0) {
+      open_file_count++;
+    }
+  }
+  release(&ftable.lock);
+
+  return open_file_count;
+}
