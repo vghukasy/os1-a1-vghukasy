@@ -4,6 +4,7 @@
 #include "riscv.h"
 #include "spinlock.h"
 #include "proc.h"
+#include "uproc.h"
 #include "defs.h"
 
 struct cpu cpus[NCPU];
@@ -722,4 +723,26 @@ procdump(void)
     printk("%d %s %s", p->pid, state, p->name);
     printk("\n");
   }
+}
+
+int
+get_process_info(int index, struct uproc *info)
+{
+  struct proc *process = &proc[index];
+
+  acquire(&wait_lock);
+  acquire(&process->lock);
+
+  int in_use = process->state != UNUSED;
+  if (in_use) {
+    info->pid = process->pid;
+    info->ppid = process->parent ? process->parent->pid : 0;
+    info->state = process->state;
+    info->sz = process->sz;
+    safestrcpy(info->name, process->name, sizeof(info->name));
+  }
+
+  release(&process->lock);
+  release(&wait_lock);
+  return in_use;
 }

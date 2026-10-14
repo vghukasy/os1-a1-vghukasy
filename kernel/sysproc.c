@@ -5,6 +5,7 @@
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
+#include "uproc.h"
 #include "vm.h"
 #include "sysinfo.h"
 
@@ -141,4 +142,35 @@ sys_sysinfo(void)
   }
 
   return 0;
+}
+
+uint64
+sys_getprocs(void)
+{
+  struct proc *caller = myproc();
+  
+  uint64 user_buffer;
+  int max_entries;
+  argaddr(0, &user_buffer);
+  argint(1, &max_entries);
+  if (max_entries < 0) {
+    return -1;
+  }
+  
+  int copied_count = 0;
+  for (int index = 0; index < NPROC && copied_count < max_entries; index++) {
+    struct uproc info;
+
+    if (!get_process_info(index, &info)) {
+      continue;
+    }
+
+    if (copyout(caller->pagetable, caller->sz, user_buffer + copied_count * sizeof(info), (char *)&info, sizeof(info)) < 0) {
+      return -1;
+    }
+
+    copied_count += 1;
+  }
+  
+  return copied_count;
 }
