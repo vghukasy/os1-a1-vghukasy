@@ -160,6 +160,7 @@ sys_getprocs(void)
   int copied_count = 0;
   for (int index = 0; index < NPROC && copied_count < max_entries; index++) {
     struct uproc info;
+    memset(&info, 0, sizeof(info));
 
     if (!get_process_info(index, &info)) {
       continue;

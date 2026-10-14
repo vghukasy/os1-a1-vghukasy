@@ -11,18 +11,33 @@ usage(void)
 int
 main(int argc, char *argv[])
 {
-    if (argc != 2 || argv[1][0] == '\0') {
+    if (argc != 2) {
         usage();
     }
 
-    int n = 0;
-    for (char *string = argv[1]; *string != 0; string++) {
-        if (*string < '0' || *string > '9') {
-            usage();
-        }
-        n = n * 10 + (*string - '0');
+    char *s = argv[1];
+    if (*s == 0) {
+        usage();
     }
 
-    pause(n);
+    int ticks = 0;
+    for (; *s; s++) {
+        if (*s < '0' || *s > '9') {
+            usage();
+        }
+
+        int digit = *s - '0';
+        // reject values that would overflow int
+        if (ticks > (0x7fffffff - digit) / 10) {
+            usage();
+        }
+        
+        ticks = ticks * 10 + digit;
+    }
+
+    if (ticks > 0) {
+        pause(ticks);
+    }
+
     exit(0);
 }

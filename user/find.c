@@ -26,7 +26,6 @@ search_directory(char *directory_path)
 {
     char entry_path[MAXPATH];
     char *entry_name;
-    struct dirent entry;
     struct stat directory_stat;
     struct stat entry_stat;
 
@@ -35,23 +34,38 @@ search_directory(char *directory_path)
         return -1;
     }
 
-    if (fstat(directory_fd, &directory_stat) < 0 || directory_stat.type != T_DIR || strlen(directory_path) + 1 + DIRSIZ >= sizeof entry_path) {
+    if (fstat(directory_fd, &directory_stat) < 0 || directory_stat.type != T_DIR || strlen(directory_path) + 1 + DIRSIZ >= sizeof(entry_path)) {
         close(directory_fd);
         return 0;
     }
+
+    struct dirent *entries = malloc(directory_stat.size + 1);
+    if (entries == 0) {
+        close(directory_fd);
+        fprintf(2, "find: out of memory\n");
+        return 0;
+    }
+
+    uint64 got = 0;
+    int r;
+    while (got < directory_stat.size && (r = read(directory_fd, (char *)entries + got, directory_stat.size - got)) > 0) {
+        got += r;
+    }
+    close(directory_fd);
+
+    int n = got / sizeof(struct dirent);
 
     strcpy(entry_path, directory_path);
     entry_name = entry_path + strlen(entry_path);
     if (entry_name[-1] != '/') {
         *entry_name++ = '/';
     }
-    
-    while (read(directory_fd, &entry, sizeof(entry)) == sizeof(entry)){
-        if (entry.inum == 0) {
+
+    for (int i = 0; i < n; i++) {
+        if (entries[i].inum == 0)
             continue;
-        }
-        
-        memmove(entry_name, entry.name, DIRSIZ);
+
+        memmove(entry_name, entries[i].name, DIRSIZ);
         entry_name[DIRSIZ] = 0;
         
         if (strcmp(entry_name, ".") == 0 || strcmp(entry_name, "..") == 0) {
@@ -67,12 +81,14 @@ search_directory(char *directory_path)
 
         if (type_matches && matches_pattern(name_pattern, entry_name)) {
             printf("%s\n", entry_path);
-        } if (is_directory) {
+        }
+
+        if (is_directory) {
             search_directory(entry_path);
         }
     }
 
-    close(directory_fd);
+    free(entries);
     return 0;
 }
 
@@ -81,7 +97,7 @@ main(int argc, char *argv[])
 {
     if (argc == 5 && strcmp(argv[3], "-type") == 0 && (strcmp(argv[4], "f") == 0 || strcmp(argv[4], "d") == 0)) {
         type_filter = argv[4][0];
-    } else if(argc != 3) {
+    } else if (argc != 3) {
         fprintf(2, "usage: find <dir> <pattern> [-type f|d]\n");
         exit(1);
     }
@@ -89,7 +105,7 @@ main(int argc, char *argv[])
     char *start_directory = argv[1];
     name_pattern = argv[2];
     
-    if (search_directory(start_directory) < 0){
+    if (search_directory(start_directory) < 0) {
         fprintf(2, "find: cannot open %s\n", start_directory);
         exit(1);
     }

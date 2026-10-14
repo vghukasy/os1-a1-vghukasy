@@ -74,12 +74,13 @@ run_command(char *command_argv[])
     }
     
     if (child_pid == 0) {
+        close(0);
         exec(command_argv[0], command_argv);
         fprintf(2, "xargs: exec %s failed\n", command_argv[0]);
         exit(1);
     }
 
-    int exit_status;
+    int exit_status = 1;
     wait(&exit_status);
     return exit_status == 0;
 }
@@ -105,6 +106,18 @@ main(int argc, char *argv[])
 
     char *command_argv[MAXARG + 1];
     int fixed_count = argc - command_start;
+
+    int max_total = MAXARG - 1;
+    if (fixed_count >= max_total) {
+        fprintf(2, "xargs: too many arguments\n");
+        exit(1);
+    }
+    int max_extra = max_total - fixed_count;
+
+    if (words_per_run > max_extra) {
+        words_per_run = max_extra;
+    }
+
     for (int i = 0; i < fixed_count; i++) {
         command_argv[i] = argv[command_start + i];
     }
@@ -117,8 +130,8 @@ main(int argc, char *argv[])
         char *word = word_storage[extra_count];
         terminator = read_word(word);
 
-        if (word[0] != 0){
-            if (fixed_count + extra_count >= MAXARG) {
+        if (word[0] != 0) {
+            if (extra_count >= max_extra) {
                 fprintf(2, "xargs: too many arguments\n");
                 exit(1);
             }
@@ -138,7 +151,7 @@ main(int argc, char *argv[])
 
             extra_count = 0;
         }
-    } while(terminator != END_OF_INPUT);
+    } while (terminator != END_OF_INPUT);
 
     exit(all_runs_succeeded ? 0 : 1);
 }
